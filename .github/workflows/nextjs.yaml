@@ -9,11 +9,6 @@ permissions:
   id-token: write
   contents: read
 
-env:
-  GKE_CLUSTER: my-gke-cluster
-  GKE_ZONE: us-central1-a
-  BUILD_TOOL: gradle  # Set this based on your project
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -28,33 +23,31 @@ jobs:
 
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
 
-      - name: Update gcloud components
-        run: gcloud components update -q
+      - name: Configure Docker to use Google Cloud
+        run: |
+          gcloud auth configure-docker gcr.io
 
       - name: Set Environment Variables
         run: |
           echo "PROJECT_ID=$(gcloud config get-value project)" >> $GITHUB_ENV
           echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+          echo "GKE_CLUSTER=my-gke-cluster" >> $GITHUB_ENV
+          echo "GKE_ZONE=us-central1-a" >> $GITHUB_ENV
 
       - name: Setup Java and Gradle
-        if: env.BUILD_TOOL == 'gradle'
+        if: ${{ contains(env.BUILD_TOOL, 'gradle') }}
         uses: actions/setup-java@v4
         with:
           java-version: "17"
           distribution: "temurin"
 
       - name: Build JAR with Gradle
-        if: env.BUILD_TOOL == 'gradle'
+        if: ${{ contains(env.BUILD_TOOL, 'gradle') }}
         run: |
           chmod +x gradlew
           ./gradlew build
-
-      - name: Configure Docker to use Google Cloud
-        run: gcloud auth configure-docker gcr.io
 
       - name: Build and Push Docker Image
         run: |
@@ -73,14 +66,19 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Update gcloud components
-        run: gcloud components update -q
-
-      - name: Set Environment Variables
+      - name: Set Environment Variables (again for deploy job)
         run: |
           echo "PROJECT_ID=$(gcloud config get-value project)" >> $GITHUB_ENV
+          echo "GKE_CLUSTER=my-gke-cluster" >> $GITHUB_ENV
+          echo "GKE_ZONE=us-central1-a" >> $GITHUB_ENV
           echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+
+      - name: Debugging:Print Environment Variables
+        run: |
+          echo "GKE_CLUSTER: $GKE_CLUSTER"
+          echo "GKE_ZONE: $GKE_ZONE"
+          echo "PROJECT_ID: $PROJECT_ID"
 
       - name: Get Kubernetes Credentials
         run: |
@@ -88,6 +86,7 @@ jobs:
 
       - name: Deploy to GKE
         run: |
-          kubectl create deployment $REPO_NAME --image=gcr.io/$PROJECT_ID/$REPO_NAME:$IMAGE_TAG --dry-run=client -o yaml | kubectl apply -f -
-          kubectl set image deployment/$REPO_NAME $REPO_NAME=gcr.io/$PROJECT_ID/$REPO_NAME:$IMAGE_TAG
-          kubectl rollout status deployment/$REPO_NAME
+          kubectl get deployments -n default | grep $REPO_NAME || echo "Deployment not found"
+          kubectl set image deployment/my-deployment my-container=gcr.io/$PROJECT_ID/$REPO_NAME:$IMAGE_TAG --namespace=default
+          kubectl rollout status deployment/my-deployment --namespace=default
+
