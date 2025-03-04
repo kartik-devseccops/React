@@ -74,7 +74,7 @@ jobs:
           echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
 
-      - name: Debugging: Print Environment Variables
+      - name: Debugging:Print Environment Variables
         run: |
           echo "GKE_CLUSTER: $GKE_CLUSTER"
           echo "GKE_ZONE: $GKE_ZONE"
