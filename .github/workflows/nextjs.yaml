@@ -33,6 +33,12 @@ jobs:
           echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
 
+      - name: Ensure GCR Repository Exists
+        run: |
+          if ! gcloud artifacts repositories describe $REPO_NAME --location=us-central1 >/dev/null 2>&1; then
+            gcloud artifacts repositories create $REPO_NAME --repository-format=docker --location=us-central1 --description="GCR Repository for $REPO_NAME"
+          fi
+
       - name: Setup Java and Gradle
         if: env.BUILD_TOOL == 'gradle'
         uses: actions/setup-java@v4
