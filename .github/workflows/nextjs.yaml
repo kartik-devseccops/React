@@ -118,4 +118,15 @@
 # }
 
 # module.exports = generateCIgithubFilesContent;
-curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST" \"https://token.actions.githubusercontent.com/.well-known/openid-configuration"
+name: Test GitHub Actions Token
+
+on: [push]
+
+jobs:
+  test-token:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Request OpenID Configuration
+        run: |
+          curl -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST" \
+          "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
