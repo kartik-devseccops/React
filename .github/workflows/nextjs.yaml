@@ -86,5 +86,7 @@ jobs:
 
       - name: Deploy to GKE
         run: |
-          kubectl set image deployment/$REPO_NAME $REPO_NAME=gcr.io/$PROJECT_ID/$REPO_NAME:$IMAGE_TAG --namespace=default
-          kubectl rollout status deployment/$REPO_NAME --namespace=default
+          kubectl get deployments -n default | grep $REPO_NAME || echo "Deployment not found"
+          kubectl set image deployment/my-deployment my-container=gcr.io/$PROJECT_ID/$REPO_NAME:$IMAGE_TAG --namespace=default
+          kubectl rollout status deployment/my-deployment --namespace=default
+
