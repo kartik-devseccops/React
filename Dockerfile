@@ -1,44 +1,79 @@
-# Use an official Python image as the base
-FROM python:3.9  
+FROM python:3.9
 
-# Setup environment variables
-ENV APP_HOME=/home/app  
-WORKDIR $APP_HOME  
+# setup environment variable
+ENV DockerHOME=/home/app
 
-# Install required system dependencies and tools
-RUN apt-get update && apt-get install -y \
-    curl unzip wget gnupg2 software-properties-common && \
-    rm -rf /var/lib/apt/lists/*  # Cleanup to reduce image size
+# set work directory
+RUN mkdir -p $DockerHOME
 
-# Install Terraform
-RUN wget -q https://releases.hashicorp.com/terraform/1.5.4/terraform_1.5.4_linux_amd64.zip && \
-    unzip terraform_1.5.4_linux_amd64.zip && \
-    mv terraform /usr/local/bin/ && \
-    rm terraform_1.5.4_linux_amd64.zip
+# where your code lives
+WORKDIR $DockerHOME
 
-# Install ArgoCD
-RUN curl -sSL -o /usr/local/bin/argocd https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64 && \
-    chmod +x /usr/local/bin/argocd
+# set environment variables
+ENV PYTHONDONTWRITEBYTECODE 1
+ENV PYTHONUNBUFFERED 1
 
-# Install Helm
-RUN curl https://raw.githubusercontent.com/helm/helm/master/scripts/get-helm-3 | bash  
+# install dependencies
+RUN pip3 install --upgrade pip
 
-# Install kubectl
-RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl" && \
-    install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl && \
-    rm kubectl
+# copy whole project to your docker home directory.
+COPY . $DockerHOME
 
-# Install Python dependencies
-COPY requirements.txt .  
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt  
+# run this command to install all dependencies
+RUN pip3 install -r requirements.txt
 
-# Expose application port
-EXPOSE 8080  
+RUN apt update
 
-# Copy and set startup script
-COPY startup.sh .  
-RUN chmod +x startup.sh  
+#RUN apt install  software-properties-common gnupg2 curl -y
 
-# Define entrypoint
-ENTRYPOINT ["./startup.sh"]
+#RUN curl https://apt.releases.hashicorp.com/gpg | gpg --dearmor > hashicorp.gpg
+
+#RUN install -o root -g root -m 644 hashicorp.gpg /etc/apt/trusted.gpg.d/
+
+#RUN apt-add-repository -y "deb [arch=$(dpkg --print-architecture)] https://apt.releases.hashicorp.com $(lsb_release -cs) main"
+
+RUN apt-get update
+ 
+RUN wget https://releases.hashicorp.com/terraform/1.5.4/terraform_1.5.4_linux_amd64.zip
+
+RUN unzip terraform_1.5.4_linux_amd64.zip
+
+RUN mv terraform /usr/local/bin/
+
+RUN rm -rf terraform_1.5.4_linux_amd64.zip
+#RUN apt-get install terraform
+
+RUN curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/download/v2.7.10/argocd-linux-amd64
+
+RUN install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+
+RUN rm argocd-linux-amd64
+
+RUN curl -LO "https://dl.k8s.io/release/$(curl -L -s https://dl.k8s.io/release/stable.txt)/bin/linux/amd64/kubectl"
+
+RUN install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+
+RUN wget https://get.helm.sh/helm-v3.9.3-linux-amd64.tar.gz
+
+RUN tar xvf helm-v3.9.3-linux-amd64.tar.gz
+
+RUN mv linux-amd64/helm /usr/local/bin
+
+RUN rm helm-v3.9.3-linux-amd64.tar.gz
+
+# RUN apt-get install gcc \
+#   && pip install -r requirements.txt
+
+# port where the Django app runs
+EXPOSE 3000
+
+# reaching the execution directory for the project
+WORKDIR $DockerHOME/devopsui/devops_ui
+
+# RUN SERVICE
+ENTRYPOINT ["/bin/bash", "../../startup.sh"]
+
+# start server
+#CMD ["python", "manage.py", "runserver", "0.0.0.0:3000"]`;
+
+  
