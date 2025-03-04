@@ -52,7 +52,7 @@ jobs:
 
       - name: Build and Push Docker Image
         run: |
-          docker build -t gcr.io/beaming-surfer-452610-r2/react:${{ github.sha }} 
+          docker build -t gcr.io/beaming-surfer-452610-r2/react:1f28d4bcf8177ebd57a0790ad58b2f7c195f39b0 .
           docker push gcr.io/$PROJECT_ID/$REPO_NAME:$IMAGE_TAG
 
   deploy:
