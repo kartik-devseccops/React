@@ -31,11 +31,15 @@ jobs:
       - name: Set Environment Variables
         id: prep
         run: |
-          echo "PROJECT_ID=$(gcloud config get-value project)" >> $GITHUB_ENV
-          echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
-          echo "GKE_CLUSTER=my-gke-cluster" >> $GITHUB_ENV
-          echo "GKE_ZONE=us-central1-a" >> $GITHUB_ENV
+          - name: Set Environment Variables
+  id: prep
+  run: |
+    echo "PROJECT_ID=$(gcloud config get-value project)" >> $GITHUB_ENV
+    echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+    echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
+    echo "GKE_CLUSTER=my-gke-cluster" >> $GITHUB_ENV
+    echo "GKE_ZONE=us-central1-a" >> $GITHUB_ENV
+
 
       - name: Setup Java and Gradle
         if: ${{ contains(env.BUILD_TOOL, 'gradle') }}
