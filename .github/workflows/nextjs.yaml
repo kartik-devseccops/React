@@ -29,47 +29,34 @@ jobs:
 
       - name: Set Environment Variables
         run: |
-          PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
-          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
-
-          if [[ -z "$PROJECT_ID" || -z "$REPO_NAME" ]]; then
-            echo "Error: PROJECT_ID or REPO_NAME is empty!"
-            exit 1
-          fi
-
-          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
-          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
+          echo "PROJECT_ID=$(gcloud config get-value project)" >> $GITHUB_ENV
+          echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
           echo "GCR_REGISTRY=gcr.io/$PROJECT_ID" >> $GITHUB_ENV
-          echo "IMAGE_LATEST=$GCR_REGISTRY/$REPO_NAME:latest" >> $GITHUB_ENV
-          echo "IMAGE_SHA=$GCR_REGISTRY/$REPO_NAME:${{ github.sha }}" >> $GITHUB_ENV
+          echo "GCR_REPOSITORY=$REPO_NAME" >> $GITHUB_ENV
 
       - name: Ensure GCR Repository Exists
         run: |
           if ! gcloud artifacts repositories describe $REPO_NAME --location=us-central1 >/dev/null 2>&1; then
-            gcloud artifacts repositories create $REPO_NAME --repository-format=docker --location=us-central1 --description="GCR Repository for $REPO_NAME"
+            echo "Creating GCR repository: $REPO_NAME"
+            gcloud artifacts repositories create $REPO_NAME \
+              --repository-format=docker \
+              --location=us-central1 \
+              --description="GCR Repository for $REPO_NAME"
+          else
+            echo "GCR repository $REPO_NAME already exists."
           fi
-
-      - name: Setup Java and Gradle
-        if: env.BUILD_TOOL == 'gradle'
-        uses: actions/setup-java@v4
-        with:
-          java-version: "17"
-          distribution: "temurin"
-
-      - name: Build JAR with Gradle
-        if: env.BUILD_TOOL == 'gradle'
-        run: |
-          if [ -f "gradlew" ]; then chmod +x gradlew; fi
-          ./gradlew build
 
       - name: Build and Push Docker Image to GCR
         run: |
           echo "Building Docker image..."
-          docker build -t $IMAGE_LATEST -t $IMAGE_SHA .
-          echo "Pushing Docker image..."
-          docker push $IMAGE_LATEST
-          docker push $IMAGE_SHA
+          docker build -t $GCR_REGISTRY/$GCR_REPOSITORY:latest -t $GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG .
+          
+          echo "Pushing Docker image to GCR..."
+          docker push $GCR_REGISTRY/$GCR_REPOSITORY:latest
+          docker push $GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG
 
       - name: Verify Image in GCR
-        run: gcloud container images list --filter="name:gcr.io/$PROJECT_ID/$REPO_NAME"
+        run: |
+          echo "Checking if image exists in GCR..."
+          gcloud container images list-tags $GCR_REGISTRY/$GCR_REPOSITORY --format="table(digest, tags, timestamp.datetime)"
