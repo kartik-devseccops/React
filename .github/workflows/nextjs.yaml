@@ -27,14 +27,23 @@ jobs:
       - name: Configure Docker to use Google Cloud
         run: gcloud auth configure-docker gcr.io
 
-      - name: Set Environment Variables
+           - name:Set Environment Variables
         run: |
-          echo "PROJECT_ID=$(gcloud config get-value project)" >> $GITHUB_ENV
-          echo "REPO_NAME=$(echo ${{ github.event.repository.name }} | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
+          REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
+
+          if [[ -z "$PROJECT_ID" || -z "$REPO_NAME" ]]; then
+            echo "Error: PROJECT_ID or REPO_NAME is empty!"
+            exit 1
+          fi
+
+          echo "PROJECT_ID=$PROJECT_ID" >> $GITHUB_ENV
+          echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
           echo "GCR_REGISTRY=gcr.io/$PROJECT_ID" >> $GITHUB_ENV
           echo "IMAGE_LATEST=$GCR_REGISTRY/$REPO_NAME:latest" >> $GITHUB_ENV
           echo "IMAGE_SHA=$GCR_REGISTRY/$REPO_NAME:${{ github.sha }}" >> $GITHUB_ENV
+
 
       - name: Ensure GCR Repository Exists
         run: |
