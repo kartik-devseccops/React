@@ -27,7 +27,7 @@ jobs:
       - name: Configure Docker to use Google Cloud
         run: gcloud auth configure-docker gcr.io
 
-           - name:Set Environment Variables
+      - name: Set Environment Variables
         run: |
           PROJECT_ID=$(gcloud config get-value project 2>/dev/null)
           REPO_NAME=$(echo "${{ github.event.repository.name }}" | tr '[:upper:]' '[:lower:]')
@@ -44,29 +44,32 @@ jobs:
           echo "IMAGE_LATEST=$GCR_REGISTRY/$REPO_NAME:latest" >> $GITHUB_ENV
           echo "IMAGE_SHA=$GCR_REGISTRY/$REPO_NAME:${{ github.sha }}" >> $GITHUB_ENV
 
-
       - name: Ensure GCR Repository Exists
         run: |
           if ! gcloud artifacts repositories describe $REPO_NAME --location=us-central1 >/dev/null 2>&1; then
-            echo "Creating GCR repository: $REPO_NAME"
-            gcloud artifacts repositories create $REPO_NAME \
-              --repository-format=docker \
-              --location=us-central1 \
-              --description="GCR Repository for $REPO_NAME"
-          else
-            echo "GCR repository $REPO_NAME already exists."
+            gcloud artifacts repositories create $REPO_NAME --repository-format=docker --location=us-central1 --description="GCR Repository for $REPO_NAME"
           fi
+
+      - name: Setup Java and Gradle
+        if: env.BUILD_TOOL == 'gradle'
+        uses: actions/setup-java@v4
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Build JAR with Gradle
+        if: env.BUILD_TOOL == 'gradle'
+        run: |
+          if [ -f "gradlew" ]; then chmod +x gradlew; fi
+          ./gradlew build
 
       - name: Build and Push Docker Image to GCR
         run: |
           echo "Building Docker image..."
           docker build -t $IMAGE_LATEST -t $IMAGE_SHA .
-          
-          echo "Pushing Docker images to GCR..."
+          echo "Pushing Docker image..."
           docker push $IMAGE_LATEST
           docker push $IMAGE_SHA
 
       - name: Verify Image in GCR
-        run: |
-          echo "Checking if image exists in GCR..."
-          gcloud container images list-tags gcr.io/$PROJECT_ID/$REPO_NAME --format="table(digest, tags, timestamp.datetime)"
+        run: gcloud container images list --filter="name:gcr.io/$PROJECT_ID/$REPO_NAME"
