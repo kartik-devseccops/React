@@ -1,4 +1,4 @@
-name: Build, Push to GCR, Deploy to GKE via ArgoCD
+name: Build, Push, and Deploy to GKE
 
 on:
   push:
@@ -42,49 +42,32 @@ jobs:
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
           echo "GCR_REGISTRY=gcr.io/$PROJECT_ID" >> $GITHUB_ENV
           echo "GCR_REPOSITORY=$REPO_NAME" >> $GITHUB_ENV
-          echo "GKE_CLUSTER=my-gke-cluster" >> $GITHUB_ENV
-          echo "GKE_ZONE=us-central1-a" >> $GITHUB_ENV
-          echo "ARGOCD_APP_NAME=my-app" >> $GITHUB_ENV
-
-      - name: Ensure GCR Repository Exists
-        run: |
-          if ! gcloud artifacts repositories describe $REPO_NAME --location=us-central1 >/dev/null 2>&1; then
-            echo "Creating GCR repository: $REPO_NAME"
-            gcloud artifacts repositories create $REPO_NAME \
-              --repository-format=docker \
-              --location=us-central1 \
-              --description="GCR Repository for $REPO_NAME"
-          else
-            echo "GCR repository $REPO_NAME already exists."
-          fi
+          echo "GKE_CLUSTER_NAME=your-cluster-name" >> $GITHUB_ENV
+          echo "GKE_REGION=us-central1" >> $GITHUB_ENV
+          echo "ARGOCD_APP_NAME=your-app" >> $GITHUB_ENV
 
       - name: Build and Push Docker Image to GCR
         run: |
-          echo "Building Docker image..."
           docker build -t $GCR_REGISTRY/$GCR_REPOSITORY:latest -t $GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG .
-
-          echo "Pushing Docker image to GCR..."
           docker push $GCR_REGISTRY/$GCR_REPOSITORY:latest
           docker push $GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG
 
-      - name: Verify Image in GCR
+      - name: Install gke-gcloud-auth-plugin
         run: |
-          echo "Checking if image exists in GCR..."
-          gcloud container images list-tags $GCR_REGISTRY/$GCR_REPOSITORY --format="table(digest, tags, timestamp.datetime)"
+          gcloud components install gke-gcloud-auth-plugin
+          gcloud components update
 
-      - name: Authenticate with GKE
+      - name: Authenticate to GKE
         run: |
-          echo "Authenticating with GKE cluster..."
-          gcloud container clusters get-credentials $GKE_CLUSTER --zone $GKE_ZONE --project $PROJECT_ID
+          gcloud container clusters get-credentials $GKE_CLUSTER_NAME --region $GKE_REGION --project $PROJECT_ID
 
-      - name: Deploy to GKE
+      - name: Update Kubernetes Deployment
         run: |
-          echo "Updating Kubernetes deployment..."
-          kubectl set image deployment/$REPO_NAME $REPO_NAME=$GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG -n default
-          kubectl rollout status deployment/$REPO_NAME -n default
+          kubectl set image deployment/$REPO_NAME $REPO_NAME=$GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG --namespace=default
+          kubectl rollout status deployment/$REPO_NAME --namespace=default
 
       - name: Sync Application in ArgoCD
         run: |
-          echo "Triggering ArgoCD sync..."
-          argocd login $ARGOCD_SERVER --username $ARGOCD_USERNAME --password $ARGOCD_PASSWORD --insecure
+          argocd login your-argocd-server --username admin --password ${{ secrets.ARGOCD_PASSWORD }}
           argocd app sync $ARGOCD_APP_NAME
+          argocd app wait $ARGOCD_APP_NAME --health
