@@ -1,4 +1,4 @@
-name: Build and Push to GCR
+name: Build, Push to GCR, and Deploy to GKE
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
+      - name: Checkout Code
         uses: actions/checkout@v3
 
       - name: Authenticate with Google Cloud
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Configure Docker to use Google Cloud
+      - name: Configure Docker to use GCR
         run: gcloud auth configure-docker gcr.io
 
       - name: Set Environment Variables
@@ -64,7 +64,43 @@ jobs:
           docker push $GCR_REGISTRY/$GCR_REPOSITORY:latest
           docker push $GCR_REGISTRY/$GCR_REPOSITORY:$IMAGE_TAG
 
-      - name: Verify Image in GCR
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Checkout Service Configs Repo
+        uses: actions/checkout@v3
+        with:
+          repository: '${{ secrets.ORG_NAME }}/${{ secrets.SERVICE_CONFIG_REPO }}'
+          token: ${{ secrets.GH_TOKEN }}
+          path: service-configs
+          ref: ${{ secrets.SERVICE_CONFIG_BRANCH }}
+
+      - name: Install yq for YAML Editing
         run: |
-          echo "Checking if image exists in GCR..."
-          gcloud container images list-tags $GCR_REGISTRY/$GCR_REPOSITORY --format="table(digest, tags, timestamp.datetime)"
+          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
+          yq --version
+
+      - name: Update ArgoCD Image Tag
+        run: |
+          cd service-configs
+          IMAGE="${{ env.IMAGE_TAG }}"
+          yq -i '.image.tag = strenv(IMAGE)' ${{ secrets.GCR_REPOSITORY }}/values.yaml
+          cat ${{ secrets.GCR_REPOSITORY }}/values.yaml
+
+      - name: Commit & Push Image Tag Update
+        uses: stefanzweifel/git-auto-commit-action@v4
+        with:
+          commit_message: "Updating image tag to ${{ env.IMAGE_TAG }}"
+          create_branch: true
+          branch: ${{ secrets.SERVICE_CONFIG_BRANCH }}
+          repository: ./service-configs
+
+      - name: Deploy to GKE with ArgoCD
+        run: |
+          echo "Connecting to GKE..."
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region ${{ secrets.GKE_REGION }}
+
+          echo "Triggering ArgoCD Sync..."
+          argocd login ${{ secrets.ARGOCD_SERVER }} --username ${{ secrets.ARGOCD_USERNAME }} --password ${{ secrets.ARGOCD_PASSWORD }}
+          argocd app sync ${{ secrets.ARGOCD_APP }}
