@@ -1,4 +1,4 @@
-name: Build, Push to GCR, and Deploy to GKE
+name: Build, Push to GCR & Deploy to GKE
 
 on:
   push:
@@ -13,7 +13,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout Code
+      - name: Checkout code
         uses: actions/checkout@v3
 
       - name: Authenticate with Google Cloud
@@ -24,7 +24,7 @@ jobs:
       - name: Set up Google Cloud SDK
         uses: google-github-actions/setup-gcloud@v1
 
-      - name: Configure Docker to use GCR
+      - name: Configure Docker to use Google Cloud
         run: gcloud auth configure-docker gcr.io
 
       - name: Set Environment Variables
@@ -68,39 +68,28 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     steps:
-      - name: Checkout Service Configs Repo
+      - name: Checkout service-configs repository
         uses: actions/checkout@v3
         with:
-          repository: '${{ secrets.ORG_NAME }}/${{ secrets.SERVICE_CONFIG_REPO }}'
-          token: ${{ secrets.GH_TOKEN }}
+          repository: '${{ secrets.SERVICE_CONFIG_REPO }}'
+          token: '${{ secrets.GH_TOKEN }}'
           path: service-configs
-          ref: ${{ secrets.SERVICE_CONFIG_BRANCH }}
 
-      - name: Install yq for YAML Editing
-        run: |
-          sudo wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O /usr/bin/yq && sudo chmod +x /usr/bin/yq
-          yq --version
-
-      - name: Update ArgoCD Image Tag
+      - name: Update Kubernetes Manifests
         run: |
           cd service-configs
-          IMAGE="${{ env.IMAGE_TAG }}"
-          yq -i '.image.tag = strenv(IMAGE)' ${{ secrets.GCR_REPOSITORY }}/values.yaml
-          cat ${{ secrets.GCR_REPOSITORY }}/values.yaml
+          echo "Updating image in deployment.yaml..."
+          yq e '.spec.template.spec.containers[0].image = env(GCR_REGISTRY) + "/" + env(GCR_REPOSITORY) + ":" + env(IMAGE_TAG)' -i deployment.yaml
+          cat deployment.yaml
 
-      - name: Commit & Push Image Tag Update
+      - name: Commit and Push Changes
         uses: stefanzweifel/git-auto-commit-action@v4
         with:
-          commit_message: "Updating image tag to ${{ env.IMAGE_TAG }}"
-          create_branch: true
-          branch: ${{ secrets.SERVICE_CONFIG_BRANCH }}
+          commit_message: "Updated image tag to ${{ github.sha }}"
+          branch: main
           repository: ./service-configs
 
-      - name: Deploy to GKE with ArgoCD
+      - name: Trigger ArgoCD Sync
         run: |
-          echo "Connecting to GKE..."
-          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} --region ${{ secrets.GKE_REGION }}
-
-          echo "Triggering ArgoCD Sync..."
-          argocd login ${{ secrets.ARGOCD_SERVER }} --username ${{ secrets.ARGOCD_USERNAME }} --password ${{ secrets.ARGOCD_PASSWORD }}
-          argocd app sync ${{ secrets.ARGOCD_APP }}
+          curl -X POST -H "Authorization: Bearer ${{ secrets.ARGOCD_TOKEN }}" \
+               https://argocd-server/api/v1/applications/my-app/sync
