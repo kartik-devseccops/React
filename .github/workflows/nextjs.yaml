@@ -42,7 +42,7 @@ jobs:
           echo "IMAGE_TAG=${{ github.sha }}" >> $GITHUB_ENV
           echo "GCR_REGISTRY=gcr.io/$PROJECT_ID" >> $GITHUB_ENV
           echo "GCR_REPOSITORY=$REPO_NAME" >> $GITHUB_ENV
-          echo "GKE_CLUSTER_NAME=your-cluster-name" >> $GITHUB_ENV
+          echo "GKE_CLUSTER_NAME=my-gke-cluster" >> $GITHUB_ENV
           echo "GKE_REGION=us-central1" >> $GITHUB_ENV
           echo "ARGOCD_APP_NAME=your-app" >> $GITHUB_ENV
 
